@@ -58,18 +58,25 @@ class Database:
         """Initialize database connection and create session factory."""
         database_url = self.config.get_database_url()
 
-        # Create async engine with optimized settings for Cloud Run
-        self.engine = create_async_engine(
-            database_url,
-            echo=self.config.environment == "development",
-            pool_size=5,
-            max_overflow=10,
-            pool_timeout=30,
-            pool_recycle=3600,
-            pool_pre_ping=True,
-            # Use NullPool for Cloud Run serverless (connections are ephemeral)
-            poolclass=NullPool if self.config.environment == "production" else None,
-        )
+        # Create async engine with optimized settings
+        engine_args = {
+            "echo": self.config.environment == "development",
+            "pool_pre_ping": True,
+        }
+        
+        # For production with Cloud Run, use NullPool (no connection pooling)
+        if self.config.environment == "production":
+            engine_args["poolclass"] = NullPool
+        else:
+            # For development, use connection pooling
+            engine_args.update({
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": 3600,
+            })
+
+        self.engine = create_async_engine(database_url, **engine_args)
 
         # Create session factory
         self.session_maker = async_sessionmaker(
