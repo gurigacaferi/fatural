@@ -339,8 +339,15 @@
 
                 if (response.ok) {
                     lastBillId = data.bill_id;
+                    console.log('Bill ID:', lastBillId);
+                    console.log('Showing status button section');
                     billStatusSection.style.display = 'block';
                     showResult('success', 'Bill uploaded successfully!', data);
+                    
+                    // Force visibility check
+                    setTimeout(() => {
+                        console.log('Button section display:', billStatusSection.style.display);
+                    }, 100);
                 } else {
                     showResult('error', 'Upload failed', data);
                 }

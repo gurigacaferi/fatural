@@ -189,13 +189,13 @@ Extract all information from the bill/receipt image."""
         """
         try:
             result = self.client.models.embed_content(
-                model="models/text-embedding-004",  # Full model path required
-                content=text  # Use 'content' not 'contents'
+                model="models/text-embedding-004",
+                contents=text
             )
             
             # Return the embedding vector
-            if result and hasattr(result, 'embedding'):
-                return result.embedding
+            if result and hasattr(result, 'embeddings') and len(result.embeddings) > 0:
+                return result.embeddings[0].values
             else:
                 # Return zero vector on failure
                 return [0.0] * 768
