@@ -22,6 +22,16 @@ echo ""
 # Get connection name
 INSTANCE_CONNECTION_NAME="$PROJECT_ID:$REGION:$SQL_INSTANCE"
 
+# Setup service account permissions
+echo "🔐 Setting up service account permissions..."
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+# Grant Secret Manager access to the default compute service account
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/secretmanager.secretAccessor"
+
 # Get DATABASE_URL from Secret Manager
 echo "🔐 Retrieving secrets..."
 DATABASE_URL_SECRET="projects/$PROJECT_ID/secrets/database-url/versions/latest"
