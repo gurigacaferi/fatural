@@ -22,9 +22,12 @@ class BillScanner:
     """
 
     def __init__(self):
-        self.api_key = os.getenv("GOOGLE_AI_API_KEY")
+        # Try multiple environment variable names for flexibility
+        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_AI_API_KEY")
         if not self.api_key:
-            raise ValueError("GOOGLE_AI_API_KEY environment variable not set")
+            # Don't fail at init, fail when actually used
+            self.client = None
+            return
         
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
@@ -81,8 +84,9 @@ Extract all information from the bill/receipt image."""
             
         Returns:
             ExtractedBillData with all extracted fields
-        """
-        try:
+        """        if not self.client:
+            raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY or GOOGLE_AI_API_KEY environment variable.")
+                try:
             # Encode image for API
             image_base64 = base64.b64encode(image_data).decode("utf-8")
             

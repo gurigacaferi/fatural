@@ -10,8 +10,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException, status
 from app.database import db
-from app.worker import BillProcessor
-from app.schemas import BillUploadMessage
 
 
 @asynccontextmanager
@@ -39,9 +37,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
-
-# Initialize processor
-processor = BillProcessor()
 
 
 @app.get("/")
@@ -75,6 +70,10 @@ async def pubsub_push(request: Request):
         "subscription": "..."
     }
     """
+    # Import here to avoid initialization errors
+    from app.worker import BillProcessor
+    from app.schemas import BillUploadMessage
+    
     try:
         # Parse Pub/Sub message
         envelope = await request.json()
@@ -94,6 +93,9 @@ async def pubsub_push(request: Request):
         
         # Parse and process
         bill_message = BillUploadMessage(**message_data)
+        
+        # Initialize processor on demand
+        processor = BillProcessor()
         await processor.process_bill_message(bill_message)
         
         print(f"✅ Processed bill {bill_message.bill_id}")
@@ -103,6 +105,8 @@ async def pubsub_push(request: Request):
         
     except Exception as e:
         print(f"❌ Error processing message: {e}")
+        import traceback
+        traceback.print_exc()
         # Return 200 anyway to avoid redelivery of bad messages
         # In production, you might want to send to a dead-letter queue
         return {"status": "error", "error": str(e)}
