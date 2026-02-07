@@ -1,20 +1,31 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+# Optimized for Cloud Run
+FROM python:3.12-slim
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the dependencies file to the working directory
-COPY requirements.txt .
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install any needed dependencies
+# Copy requirements and install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the content of the local src directory to the working directory
-COPY . .
+# Copy application code
+COPY app/ ./app/
+COPY scripts/ ./scripts/
 
-# Specify the port the app will run on
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# Expose port
 EXPOSE 8080
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+
