@@ -52,6 +52,8 @@ gcloud run deploy $SERVICE_NAME \
     --memory 1Gi \
     --cpu 2 \
     --timeout 600 \
+    --command="uvicorn" \
+    --args="app.worker_service:app,--host,0.0.0.0,--port,8080" \
     --set-env-vars="^||^GCP_PROJECT_ID=$PROJECT_ID||GCS_BUCKET_NAME=$BUCKET_NAME||PUBSUB_SUBSCRIPTION=$SUBSCRIPTION_NAME||ENVIRONMENT=production||INSTANCE_CONNECTION_NAME=$INSTANCE_CONNECTION_NAME||DB_NAME=fatural||DB_USER=fatural-app" \
     --set-secrets="DB_PASSWORD=db-password:latest,GEMINI_API_KEY=gemini-api-key:latest" \
     --add-cloudsql-instances $INSTANCE_CONNECTION_NAME
