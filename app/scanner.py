@@ -137,6 +137,10 @@ Extract all information from the bill/receipt image."""
                 raise ValueError("Empty response from Gemini API")
                 
         except Exception as e:
+            # Log the actual error for debugging
+            print(f"❌ Gemini extraction error: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             # Return minimal valid response on error
             return ExtractedBillData(
                 vendor_name="Extraction Failed",
