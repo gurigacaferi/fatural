@@ -13,6 +13,7 @@ from uuid import UUID
 from google.cloud import pubsub_v1, storage
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from pgvector.sqlalchemy import Vector
 
 from app.database import db
 from app.models import Bill
@@ -124,7 +125,11 @@ class BillProcessor:
                     bill.raw_extraction = extracted_data.model_dump()
                     
                     # Store embedding for future duplicate checks
-                    bill.visual_fingerprint = embedding
+                    # Convert embedding list to proper format for pgvector
+                    if isinstance(embedding, list):
+                        bill.visual_fingerprint = embedding
+                    else:
+                        bill.visual_fingerprint = list(embedding)
                     
                     print(f"Bill {bill_id} processed successfully")
                 
