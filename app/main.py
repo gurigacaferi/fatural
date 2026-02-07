@@ -156,7 +156,7 @@ async def health_check():
     db_status = "unknown"
     try:
         # Try a simple DB query
-        async with db.session() as session:
+        async with db.get_session() as session:
             await session.execute(select(1))
             db_status = "connected"
     except Exception as e:
