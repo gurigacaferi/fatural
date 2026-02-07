@@ -44,6 +44,11 @@ PROXY_PID=$!
 echo "   Waiting for proxy connection..."
 sleep 5
 
+# Install Python dependencies if needed
+echo ""
+echo "📦 Installing Python dependencies..."
+pip install -q sqlalchemy[asyncio] asyncpg psycopg2-binary pgvector pydantic || true
+
 # Run database initialization
 echo ""
 echo "📊 Running database initialization script..."

@@ -40,9 +40,8 @@ gcloud run deploy $SERVICE_NAME \
     --cpu 1 \
     --timeout 300 \
     --set-env-vars="^||^GCP_PROJECT_ID=$PROJECT_ID||GCS_BUCKET_NAME=$BUCKET_NAME||PUBSUB_TOPIC=$TOPIC_NAME||ENVIRONMENT=production||INSTANCE_CONNECTION_NAME=$INSTANCE_CONNECTION_NAME||DB_NAME=fatural||DB_USER=fatural-app" \
-    --set-secrets="DB_PASSWORD=db-password:latest,GOOGLE_AI_API_KEY=gemini-api-key:latest" \
-    --add-cloudsql-instances $INSTANCE_CONNECTION_NAME \
-    --service-account fatural-api@$PROJECT_ID.iam.gserviceaccount.com
+    --set-secrets="DB_PASSWORD=db-password:latest" \
+    --add-cloudsql-instances $INSTANCE_CONNECTION_NAME
 
 # Get service URL
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format='value(status.url)')

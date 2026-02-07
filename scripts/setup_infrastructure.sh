@@ -144,6 +144,48 @@ echo -n "$DATABASE_URL" | gcloud secrets versions add database-url \
     --data-file=-
 echo "   ✅ DATABASE_URL secret stored"
 
+# Create service accounts
+echo ""
+echo "👤 Creating service accounts..."
+for SA in fatural-api fatural-worker; do
+    if gcloud iam service-accounts describe $SA@$PROJECT_ID.iam.gserviceaccount.com 2>/dev/null; then
+        echo "   ✅ Service account $SA already exists"
+    else
+        gcloud iam service-accounts create $SA \
+            --display-name="Fatural ${SA^} Service Account" \
+            --description="Service account for Fatural ${SA^} service"
+        echo "   ✅ Service account $SA created"
+    fi
+done
+
+# Grant IAM permissions
+echo ""
+echo "🔐 Granting IAM permissions..."
+# API service permissions
+for ROLE in roles/cloudsql.client roles/storage.objectAdmin roles/pubsub.publisher; do
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+        --member="serviceAccount:fatural-api@$PROJECT_ID.iam.gserviceaccount.com" \
+        --role="$ROLE" --quiet
+done
+
+# Worker service permissions
+for ROLE in roles/cloudsql.client roles/storage.objectViewer roles/pubsub.subscriber; do
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+        --member="serviceAccount:fatural-worker@$PROJECT_ID.iam.gserviceaccount.com" \
+        --role="$ROLE" --quiet
+done
+
+# Grant secret access to both service accounts
+for SA in fatural-api fatural-worker; do
+    for SECRET in db-password database-url; do
+        gcloud secrets add-iam-policy-binding $SECRET \
+            --member="serviceAccount:$SA@$PROJECT_ID.iam.gserviceaccount.com" \
+            --role="roles/secretmanager.secretAccessor" --quiet
+    done
+done
+
+echo "   ✅ All permissions granted"
+
 # Get Cloud SQL connection name
 echo ""
 echo "=========================================="
