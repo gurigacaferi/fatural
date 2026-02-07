@@ -84,9 +84,11 @@ Extract all information from the bill/receipt image."""
             
         Returns:
             ExtractedBillData with all extracted fields
-        """        if not self.client:
+        """
+        if not self.client:
             raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY or GOOGLE_AI_API_KEY environment variable.")
-                try:
+        
+        try:
             # Encode image for API
             image_base64 = base64.b64encode(image_data).decode("utf-8")
             
