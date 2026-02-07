@@ -38,13 +38,19 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     print("🚀 Starting Fatural Bill Scanner API...")
-    await db.connect()
-    print("✅ Database connected")
+    try:
+        await db.connect()
+        print("✅ Database connected")
+    except Exception as e:
+        print(f"⚠️ Database connection failed (will retry on request): {e}")
     yield
     # Shutdown
     print("⏹️  Shutting down...")
-    await db.disconnect()
-    print("✅ Database disconnected")
+    try:
+        await db.disconnect()
+        print("✅ Database disconnected")
+    except Exception as e:
+        print(f"⚠️ Error during shutdown: {e}")
 
 
 # Initialize FastAPI app
@@ -147,9 +153,18 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Detailed health check."""
+    db_status = "unknown"
+    try:
+        # Try a simple DB query
+        async with db.session() as session:
+            await session.execute(select(1))
+            db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)[:50]}"
+    
     return {
         "status": "healthy",
-        "database": "connected",
+        "database": db_status,
         "timestamp": datetime.utcnow().isoformat()
     }
 
