@@ -3,6 +3,8 @@ FastAPI application - AI Bill Scanner API.
 Multi-tenant architecture with Cloud Run deployment.
 """
 
+import csv
+import io
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -19,6 +21,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from google.cloud import pubsub_v1, storage
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -474,3 +477,79 @@ async def get_stats(
         "total_amount_processed": total_amount,
         "currency": "EUR"
     }
+
+
+@app.get("/bills/export/csv", tags=["Analytics"])
+async def export_bills_csv(
+    company: Company = Depends(get_current_company),
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Export all bills for the company as CSV.
+    Downloads automatically with proper CSV formatting.
+    """
+    # Fetch all completed bills for the company
+    result = await session.execute(
+        select(Bill).where(
+            Bill.company_id == company.id,
+            Bill.status == "completed"
+        ).order_by(Bill.bill_date.desc())
+    )
+    bills = result.scalars().all()
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        'Date',
+        'Merchant',
+        'Total',
+        'VAT_8',
+        'VAT_18',
+        'ATK_Code',
+        'NUI'
+    ])
+    
+    # Write bill data
+    for bill in bills:
+        # Extract VAT and ATK codes from line items if available
+        vat_8 = 0.0
+        vat_18 = 0.0
+        atk_codes = set()
+        
+        if bill.extracted_data:
+            for item in bill.extracted_data.get('line_items', []):
+                if item.get('vat_rate') == 0.08:
+                    vat_8 += item.get('vat_amount', 0.0)
+                elif item.get('vat_rate') == 0.18:
+                    vat_18 += item.get('vat_amount', 0.0)
+                
+                atk_code = item.get('atk_code')
+                if atk_code:
+                    atk_codes.add(atk_code)
+        
+        writer.writerow([
+            bill.bill_date.strftime('%Y-%m-%d') if bill.bill_date else '',
+            bill.vendor_name or '',
+            f"{bill.total_amount:.2f}",
+            f"{vat_8:.2f}",
+            f"{vat_18:.2f}",
+            ','.join(sorted(atk_codes)) if atk_codes else '',
+            bill.vendor_tax_number or ''
+        ])
+    
+    # Reset buffer position
+    output.seek(0)
+    
+    # Generate filename with timestamp
+    filename = f"bills_export_{company.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
