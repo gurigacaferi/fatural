@@ -1,45 +1,48 @@
 #!/bin/bash
 #
-# Deploy frontend to Cloud Storage as static website
+# Deploy Next.js frontend to Cloud Run
 #
 
 set -e
 
 PROJECT_ID="adept-ethos-483609-j4"
-BUCKET_NAME="fatural-frontend"
 REGION="europe-west3"
+SERVICE_NAME="fatural-frontend"
 
 echo "=========================================="
-echo "Deploying Frontend to Cloud Storage"
+echo "Deploying Fatural Frontend to Cloud Run"
 echo "=========================================="
-echo "Bucket: $BUCKET_NAME"
+echo "Service: $SERVICE_NAME"
+echo "Region: $REGION"
 echo ""
 
-# Create bucket for frontend
-echo "📦 Creating frontend bucket..."
-gsutil mb -p $PROJECT_ID -l $REGION -c STANDARD gs://$BUCKET_NAME 2>/dev/null || echo "Bucket already exists"
+# Build and deploy with Cloud Build
+echo "🔨 Building and deploying frontend..."
+gcloud run deploy $SERVICE_NAME \
+  --source=./frontend \
+  --platform=managed \
+  --region=$REGION \
+  --allow-unauthenticated \
+  --port=8080 \
+  --memory=512Mi \
+  --cpu=1 \
+  --min-instances=0 \
+  --max-instances=10 \
+  --timeout=300 \
+  --project=$PROJECT_ID
 
-# Make bucket publicly readable
-echo "🔓 Making bucket public..."
-gsutil iam ch allUsers:objectViewer gs://$BUCKET_NAME
-
-# Enable website configuration
-echo "🌐 Configuring as website..."
-gsutil web set -m frontend.html -e frontend.html gs://$BUCKET_NAME
-
-# Upload frontend
-echo "📤 Uploading frontend..."
-gsutil cp frontend.html gs://$BUCKET_NAME/
-
-# Get public URL
-PUBLIC_URL="https://storage.googleapis.com/$BUCKET_NAME/frontend.html"
+# Get the service URL
+SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+  --region=$REGION \
+  --format='value(status.url)' \
+  --project=$PROJECT_ID)
 
 echo ""
 echo "=========================================="
 echo "✅ Frontend Deployment Complete!"
 echo "=========================================="
 echo ""
-echo "🌐 Public URL: $PUBLIC_URL"
+echo "🌐 Public URL: $SERVICE_URL"
 echo ""
 echo "📝 You can now access your frontend from anywhere!"
 echo ""
