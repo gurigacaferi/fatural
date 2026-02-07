@@ -39,7 +39,7 @@ echo "🚀 Deploying Worker service..."
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME:latest"
 
 echo "📦 Building container image..."
-gcloud builds submit --tag $IMAGE_NAME --dockerfile Dockerfile.worker .
+gcloud builds submit --config cloudbuild.worker.yaml .
 
 echo "🚀 Deploying to Cloud Run..."
 gcloud run deploy $SERVICE_NAME \
