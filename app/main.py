@@ -150,20 +150,39 @@ async def root():
     }
 
 
+@app.get("/debug/env", tags=["Health"])
+async def debug_env():
+    """Debug endpoint to check environment configuration."""
+    return {
+        "environment": os.getenv("ENVIRONMENT", "unknown"),
+        "gcp_project": os.getenv("GCP_PROJECT_ID", "not_set"),
+        "db_name": os.getenv("DB_NAME", "not_set"),
+        "db_user": os.getenv("DB_USER", "not_set"),
+        "db_password_set": bool(os.getenv("DB_PASSWORD")),
+        "instance_connection": os.getenv("INSTANCE_CONNECTION_NAME", "not_set"),
+        "bucket_name": os.getenv("GCS_BUCKET_NAME", "not_set"),
+        "pubsub_topic": os.getenv("PUBSUB_TOPIC", "not_set"),
+    }
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Detailed health check."""
     db_status = "unknown"
     try:
-        # Try a simple DB query
-        async with db.get_session() as session:
-            await session.execute(select(1))
-            db_status = "connected"
+        # Check if database is initialized
+        if not db.session_maker:
+            db_status = "not_initialized"
+        else:
+            # Try a simple DB query
+            async with db.get_session() as session:
+                await session.execute(select(1))
+                db_status = "connected"
     except Exception as e:
-        db_status = f"error: {str(e)[:50]}"
+        db_status = f"error: {str(e)[:100]}"
     
     return {
-        "status": "healthy",
+        "status": "healthy" if db_status == "connected" else "degraded",
         "database": db_status,
         "timestamp": datetime.utcnow().isoformat()
     }
