@@ -34,10 +34,16 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --role="roles/secretmanager.secretAccessor"
 
 echo "🚀 Deploying Worker service..."
+
+# Build the container image with custom Dockerfile
+IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME:latest"
+
+echo "📦 Building container image..."
+gcloud builds submit --tag $IMAGE_NAME --dockerfile Dockerfile.worker .
+
+echo "🚀 Deploying to Cloud Run..."
 gcloud run deploy $SERVICE_NAME \
-    --source . \
-    --image-project $PROJECT_ID \
-    --dockerfile Dockerfile.worker \
+    --image $IMAGE_NAME \
     --region $REGION \
     --platform managed \
     --no-allow-unauthenticated \
