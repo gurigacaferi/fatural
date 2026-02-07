@@ -31,7 +31,7 @@ class BillScanner:
         
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = "gemini-2.0-flash-exp"  # Latest Flash model in 2026
+        self.model_name = "gemini-3-flash-preview"  # Gemini 3.0 Flash preview model
         
         # Kosovo-specific extraction prompt
         self.system_prompt = """You are an expert OCR and data extraction AI specialized in Kosovo business documents.
