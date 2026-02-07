@@ -178,15 +178,15 @@ class BillProcessor:
         Returns:
             Dictionary with duplicate detection results
         """
-        # Convert embedding to pgvector format
-        embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+        # Use embedding directly as a list for pgvector
+        # pgvector will handle the conversion
         
         # Find most similar bill using cosine similarity
         # Note: Lower cosine distance = higher similarity
         # Distance of 0 = identical, distance of 1 = orthogonal
         query = select(
             Bill.id,
-            Bill.visual_fingerprint.cosine_distance(embedding_str).label("distance")
+            Bill.visual_fingerprint.cosine_distance(embedding).label("distance")
         ).where(
             Bill.company_id == company_id,  # Multi-tenant isolation
             Bill.status == "completed",  # Only compare to completed bills
