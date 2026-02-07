@@ -240,6 +240,12 @@
         <button id="upload-btn" disabled>Upload Bill</button>
 
         <div class="result" id="result"></div>
+
+        <div id="bill-status-section" style="display: none; margin-top: 20px;">
+            <button id="check-status-btn" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                Check Bill Status
+            </button>
+        </div>
     </div>
 
     <script>
@@ -253,8 +259,11 @@
         const companyIdInput = document.getElementById('company-id');
         const imagePreview = document.getElementById('image-preview');
         const previewImg = document.getElementById('preview-img');
+        const billStatusSection = document.getElementById('bill-status-section');
+        const checkStatusBtn = document.getElementById('check-status-btn');
 
         let selectedFile = null;
+        let lastBillId = null;
 
         // File upload click
         fileUpload.addEventListener('click', () => fileInput.click());
@@ -329,6 +338,8 @@
                 const data = await response.json();
 
                 if (response.ok) {
+                    lastBillId = data.bill_id;
+                    billStatusSection.style.display = 'block';
                     showResult('success', 'Bill uploaded successfully!', data);
                 } else {
                     showResult('error', 'Upload failed', data);
@@ -338,6 +349,35 @@
             } finally {
                 uploadBtn.disabled = false;
                 uploadBtn.innerHTML = 'Upload Bill';
+            }
+        });
+
+        checkStatusBtn.addEventListener('click', async () => {
+            if (!lastBillId) return;
+
+            const companyId = companyIdInput.value.trim();
+            checkStatusBtn.disabled = true;
+            checkStatusBtn.innerHTML = '<span class="loading"></span>Checking...';
+
+            try {
+                const response = await fetch(`${API_URL}/bills/${lastBillId}`, {
+                    headers: {
+                        'X-Company-Id': companyId
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult('info', `Bill Status: ${data.status.toUpperCase()}`, data);
+                } else {
+                    showResult('error', 'Failed to get bill status', data);
+                }
+            } catch (error) {
+                showResult('error', 'Network error', { error: error.message });
+            } finally {
+                checkStatusBtn.disabled = false;
+                checkStatusBtn.innerHTML = 'Check Bill Status';
             }
         });
 
