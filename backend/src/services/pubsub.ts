@@ -4,7 +4,7 @@
 import { PubSub } from "@google-cloud/pubsub";
 
 const projectId = process.env.GCP_PROJECT_ID;
-const topicName = process.env.PUBSUB_TOPIC || "bill-upload";
+const topicName = process.env.PUBSUB_TOPIC || "bill-extraction";
 
 let pubsub: PubSub | null = null;
 

@@ -1,35 +1,40 @@
 /**
- * Pub/Sub Worker – processes uploaded bill images.
+ * Pub/Sub Worker – HTTP push endpoint for Cloud Run.
+ *
+ * Google Cloud Pub/Sub push subscription delivers messages as HTTP POST
+ * requests to this service's URL. We verify the OIDC token (Cloud Run
+ * handles this automatically when invoker auth is required) and process
+ * the bill described in the message payload.
  *
  * Flow:
- * 1. Receive message from "bill-upload" topic
- * 2. Download image(s) from GCS
- * 3. Extract expense data via Gemini 2.0 Flash
- * 4. Generate embedding for duplicate detection
- * 5. Check vector similarity (pgvector cosine, threshold 0.95)
- * 6. Save expenses to DB
- * 7. Update bill status (processed / duplicate / error)
- *
- * Run with: npx tsx src/worker/processor.ts
+ * 1. Receive POST / from Pub/Sub push subscription
+ * 2. Decode base64 message.data → BillUploadMessage
+ * 3. Download image(s) from GCS
+ * 4. Extract expense data via Gemini Flash
+ * 5. Generate embedding for duplicate detection
+ * 6. Check vector similarity (pgvector cosine, threshold 0.95)
+ * 7. Save expenses to DB
+ * 8. Update bill status (processed / duplicate / error)
+ * 9. Return 200 OK (non-2xx causes Pub/Sub to retry)
  */
-import { PubSub, Message } from "@google-cloud/pubsub";
+import express, { Request, Response } from "express";
 import { query, getClient } from "../config/database.js";
 import { geminiService } from "../services/gemini.js";
 import { downloadFromGcs } from "../services/storage.js";
 
-const pubsub = new PubSub({
-  projectId: process.env.GCP_PROJECT_ID,
-});
-
-const SUBSCRIPTION_NAME =
-  process.env.PUBSUB_SUBSCRIPTION || "bill-upload-sub";
+const PORT = parseInt(process.env.PORT || "8080", 10);
 const SIMILARITY_THRESHOLD = 0.95;
 
 interface BillUploadMessage {
   billId: string;
   companyId: string;
   userId: string;
-  filePaths: string[];
+  /** Single file path (sent by API) */
+  storagePath?: string;
+  mimeType?: string;
+  uploadedAt?: string;
+  /** Legacy: multiple file paths */
+  filePaths?: string[];
   batchId?: string;
 }
 
@@ -37,7 +42,25 @@ interface BillUploadMessage {
 // Process a single bill
 // ---------------------------------------------------------------------------
 async function processBill(msg: BillUploadMessage): Promise<void> {
-  const { billId, companyId, userId, filePaths, batchId } = msg;
+  const { billId, companyId, userId, batchId } = msg;
+
+  // Normalise file paths: accept either storagePath (single) or filePaths (array)
+  const filePaths: string[] =
+    msg.filePaths && msg.filePaths.length > 0
+      ? msg.filePaths
+      : msg.storagePath
+      ? [msg.storagePath]
+      : [];
+
+  if (filePaths.length === 0) {
+    console.error(`[Worker] No file paths in message for bill ${billId}`);
+    await query(
+      `UPDATE bills SET status = 'error', error_message = 'No file paths provided' WHERE id = $1`,
+      [billId]
+    );
+    return;
+  }
+
   console.log(`[Worker] Processing bill ${billId} (${filePaths.length} files)`);
 
   // Update bill status → processing
@@ -211,54 +234,66 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Message handler
+// HTTP push handler (Cloud Run receives POST from Pub/Sub push subscription)
 // ---------------------------------------------------------------------------
-function handleMessage(message: Message): void {
-  let data: BillUploadMessage;
-  try {
-    data = JSON.parse(message.data.toString());
-  } catch {
-    console.error("[Worker] Invalid message payload, acking to discard");
-    message.ack();
-    return;
-  }
+const app = express();
+app.use(express.json());
 
-  processBill(data)
-    .then(() => message.ack())
-    .catch((err) => {
-      console.error("[Worker] Processing failed, nacking:", err);
-      message.nack();
-    });
-}
+/** Health check – Cloud Run startup probe */
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+
+/**
+ * POST /  — Pub/Sub push envelope:
+ * {
+ *   "message": { "data": "<base64>", "messageId": "...", "publishTime": "..." },
+ *   "subscription": "projects/.../subscriptions/..."
+ * }
+ */
+app.post("/", async (req: Request, res: Response) => {
+  try {
+    const envelope = req.body as {
+      message?: { data?: string; messageId?: string };
+      subscription?: string;
+    };
+
+    if (!envelope?.message?.data) {
+      console.error("[Worker] Invalid Pub/Sub envelope – missing message.data");
+      // Ack by returning 200 to avoid infinite retry of bad messages
+      return res.status(200).json({ error: "Invalid envelope" });
+    }
+
+    let payload: BillUploadMessage;
+    try {
+      const decoded = Buffer.from(envelope.message.data, "base64").toString(
+        "utf-8"
+      );
+      payload = JSON.parse(decoded);
+    } catch (parseErr) {
+      console.error("[Worker] Failed to parse message data:", parseErr);
+      // Ack bad messages so they don't loop forever
+      return res.status(200).json({ error: "Bad message payload" });
+    }
+
+    console.log(
+      `[Worker] Received push for bill ${payload.billId} (msgId: ${envelope.message.messageId})`
+    );
+
+    await processBill(payload);
+
+    // Return 200 → Pub/Sub considers message delivered
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    console.error("[Worker] Unhandled error in push handler:", err);
+    // Return 500 → Pub/Sub will retry according to retry policy
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-async function main() {
-  console.log(`[Worker] Starting – subscription: ${SUBSCRIPTION_NAME}`);
-
-  const subscription = pubsub.subscription(SUBSCRIPTION_NAME, {
-    flowControl: { maxMessages: 5 },
-  });
-
-  subscription.on("message", handleMessage);
-  subscription.on("error", (err) => {
-    console.error("[Worker] Subscription error:", err);
-  });
-
-  // Graceful shutdown
-  const shutdown = () => {
-    console.log("[Worker] Shutting down...");
-    subscription.removeListener("message", handleMessage);
-    subscription.close().then(() => process.exit(0));
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-
-  console.log("[Worker] Listening for messages...");
-}
-
-main().catch((err) => {
-  console.error("[Worker] Fatal:", err);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`[Worker] HTTP push server listening on port ${PORT}`);
 });
