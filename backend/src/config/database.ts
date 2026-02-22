@@ -1,21 +1,40 @@
 /**
  * PostgreSQL connection pool with pgvector support.
+ * In Cloud Run, connect via Unix socket (/cloudsql/<INSTANCE_CONNECTION_NAME>).
+ * Locally, connect via TCP host/port.
  */
 import pg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const pool = new pg.Pool({
-  host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT || "5432"),
-  database: process.env.DB_NAME || "fatural",
-  user: process.env.DB_USER || "fatural",
-  password: process.env.DB_PASSWORD || "",
-  max: 20,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-});
+// Cloud SQL Auth Proxy (Unix socket) takes precedence in production
+const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
+
+const poolConfig: pg.PoolConfig = instanceConnectionName
+  ? {
+      // Cloud Run: Unix socket provided by the Cloud SQL proxy sidecar
+      host: `/cloudsql/${instanceConnectionName}`,
+      database: process.env.DB_NAME || "fatural",
+      user: process.env.DB_USER || "fatural-app",
+      password: process.env.DB_PASSWORD || "",
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    }
+  : {
+      // Local development: TCP
+      host: process.env.DB_HOST || "localhost",
+      port: parseInt(process.env.DB_PORT || "5432"),
+      database: process.env.DB_NAME || "fatural",
+      user: process.env.DB_USER || "fatural",
+      password: process.env.DB_PASSWORD || "",
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+    };
+
+const pool = new pg.Pool(poolConfig);
 
 // Register pgvector type on first connection
 pool.on("connect", async (client) => {

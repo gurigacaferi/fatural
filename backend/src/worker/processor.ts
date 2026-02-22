@@ -67,13 +67,10 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
   await query(`UPDATE bills SET status = 'processing' WHERE id = $1`, [billId]);
 
   try {
-    // 1. Download files from GCS
-    const imageBuffers: Buffer[] = [];
-    const mimeTypes: string[] = [];
+    // 1. Download files from GCS and build image parts
+    const imageParts: { data: Buffer; mimeType: string }[] = [];
     for (const fp of filePaths) {
       const buf = await downloadFromGcs(fp);
-      imageBuffers.push(buf);
-      // Infer MIME from extension
       const ext = fp.split(".").pop()?.toLowerCase() || "jpeg";
       const mimeMap: Record<string, string> = {
         jpg: "image/jpeg",
@@ -86,16 +83,13 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
         heif: "image/heif",
         pdf: "application/pdf",
       };
-      mimeTypes.push(mimeMap[ext] || "image/jpeg");
+      imageParts.push({ data: buf, mimeType: mimeMap[ext] || "image/jpeg" });
     }
 
     // 2. Extract expense data via Gemini
-    const extracted = await geminiService.extractFromImages(
-      imageBuffers,
-      mimeTypes
-    );
+    const extracted = await geminiService.extractFromImages(imageParts);
 
-    if (!extracted || extracted.length === 0) {
+    if (!extracted || !extracted.expenses || extracted.expenses.length === 0) {
       await query(
         `UPDATE bills SET status = 'error', error_message = 'No data extracted' WHERE id = $1`,
         [billId]
@@ -150,12 +144,31 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
     }
 
     // 5. Save extracted expenses
+    const expenses = extracted.expenses;
     const client = await getClient();
     try {
       await client.query("BEGIN");
 
-      for (let i = 0; i < extracted.length; i++) {
-        const exp = extracted[i];
+      // Update top-level bill metadata from Gemini result
+      await client.query(
+        `UPDATE bills
+         SET vendor_name = $2, vendor_tax_number = $3, bill_number = $4,
+             bill_date = $5, total_amount = $6, currency = $7, confidence_score = $8
+         WHERE id = $1`,
+        [
+          billId,
+          extracted.vendor_name || null,
+          extracted.vendor_tax_number || null,
+          extracted.bill_number || null,
+          extracted.bill_date || null,
+          extracted.total_amount || 0,
+          extracted.currency || "EUR",
+          extracted.confidence_score || null,
+        ]
+      );
+
+      for (let i = 0; i < expenses.length; i++) {
+        const exp = expenses[i];
         await client.query(
           `INSERT INTO expenses
             (id, company_id, user_id, bill_id, batch_id,
@@ -176,11 +189,11 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
             exp.amount || 0,
             exp.date || new Date().toISOString().slice(0, 10),
             exp.merchant || null,
-            exp.vatCode || "No VAT",
-            exp.tvshPercentage ?? 0,
+            exp.vat_code || "No VAT",
+            exp.tvsh_percentage ?? 0,
             exp.nui || null,
-            exp.nrFiskal || null,
-            exp.numriITvshSe || null,
+            exp.nr_fiskal || null,
+            exp.numri_i_tvsh_se || null,
             exp.sasia ?? 1,
             exp.njesia || "cope",
             exp.description || null,
@@ -192,7 +205,7 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
       // Update bill status & increment user scan count
       await client.query(
         `UPDATE bills SET status = 'processed', page_count = $2 WHERE id = $1`,
-        [billId, extracted.length]
+        [billId, expenses.length]
       );
       await client.query(
         `UPDATE users SET scan_count = scan_count + 1 WHERE id = $1`,
@@ -208,7 +221,7 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
           userId,
           JSON.stringify({
             billId,
-            expenseCount: extracted.length,
+            expenseCount: expenses.length,
             fileCount: filePaths.length,
           }),
         ]
@@ -216,7 +229,7 @@ async function processBill(msg: BillUploadMessage): Promise<void> {
 
       await client.query("COMMIT");
       console.log(
-        `[Worker] Bill ${billId} processed – ${extracted.length} expenses saved`
+        `[Worker] Bill ${billId} processed – ${expenses.length} expenses saved`
       );
     } catch (e) {
       await client.query("ROLLBACK");

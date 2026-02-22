@@ -61,13 +61,13 @@ export function requireAdmin(
  */
 export function signTokens(payload: JwtPayload) {
   const accessToken = jwt.sign(payload, JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "15m",
+    expiresIn: (process.env.JWT_EXPIRES_IN || "15m") as any,
   });
 
   const refreshToken = jwt.sign(
     { userId: payload.userId, type: "refresh" },
     JWT_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
+    { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || "7d") as any }
   );
 
   return { accessToken, refreshToken };

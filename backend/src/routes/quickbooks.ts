@@ -44,9 +44,9 @@ router.get("/callback", async (req: AuthenticatedRequest, res: Response) => {
       [
         userId,
         realmId,
-        tokens.access_token,
-        tokens.refresh_token,
-        new Date(Date.now() + tokens.expires_in * 1000),
+        tokens.accessToken,
+        tokens.refreshToken,
+        tokens.expiresAt,
       ]
     );
 

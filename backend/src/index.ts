@@ -19,6 +19,9 @@ dotenv.config();
 const app = express();
 const PORT = parseInt(process.env.PORT || "4000");
 
+// Trust Cloud Run / GCP load balancer proxy
+app.set("trust proxy", 1);
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------

@@ -53,7 +53,7 @@ export async function exchangeCodeForTokens(code: string) {
     throw new Error(`QB token exchange failed: ${JSON.stringify(err)}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as any;
   return {
     accessToken: data.access_token as string,
     refreshToken: data.refresh_token as string,
@@ -80,7 +80,7 @@ export async function refreshAccessToken(refreshToken: string) {
 
   if (!res.ok) throw new Error("Failed to refresh QB token");
 
-  const data = await res.json();
+  const data = await res.json() as any;
   return {
     accessToken: data.access_token as string,
     refreshToken: data.refresh_token as string,
@@ -134,7 +134,7 @@ async function findOrCreateVendor(
   const searchRes = await fetch(searchUrl, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
-  const searchData = await searchRes.json();
+  const searchData = await searchRes.json() as any;
   if (searchData?.QueryResponse?.Vendor?.length > 0) {
     return { value: searchData.QueryResponse.Vendor[0].Id };
   }
@@ -149,7 +149,7 @@ async function findOrCreateVendor(
     },
     body: JSON.stringify({ DisplayName: name }),
   });
-  const createData = await createRes.json();
+  const createData = await createRes.json() as any;
   if (createRes.ok && createData?.Vendor?.Id) {
     return { value: createData.Vendor.Id };
   }
