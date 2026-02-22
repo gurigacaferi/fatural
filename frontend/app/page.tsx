@@ -1,23 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import Dashboard from "@/components/Dashboard";
-import BillsPage from "@/components/BillsPage";
-import SettingsPage from "@/components/SettingsPage";
+import { useSession } from "@/hooks/useSession";
+import { useEffect } from "react";
+import { Loader2, Receipt } from "lucide-react";
 
 export default function Home() {
-  const [currentPage, setCurrentPage] = useState("dashboard");
-  const [companyId] = useState("0944756b-48ce-417b-903c-664cd63cad17");
+  const { user, loading } = useSession();
+
+  useEffect(() => {
+    if (!loading) {
+      if (user) {
+        window.location.href = "/dashboard";
+      } else {
+        window.location.href = "/login";
+      }
+    }
+  }, [user, loading]);
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="flex-1 overflow-y-auto">
-        {currentPage === "dashboard" && <Dashboard companyId={companyId} />}
-        {currentPage === "bills" && <BillsPage companyId={companyId} />}
-        {currentPage === "settings" && <SettingsPage companyId={companyId} />}
-      </main>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10">
+      <div className="flex items-center gap-3 mb-4">
+        <Receipt className="h-10 w-10 text-primary" />
+        <span className="text-3xl font-bold text-primary">Fatural</span>
+      </div>
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   );
 }
